@@ -24,6 +24,7 @@ RSpec.describe "Message user info", type: :system, js: true do
 
   context "with two messages from the same user" do
     fab!(:message_1) { Fabricate(:chat_message, chat_channel: channel_1, user: current_user) }
+
     fab!(:message_2) { Fabricate(:chat_message, chat_channel: channel_1, user: current_user) }
 
     it "shows user info only on first message" do
