@@ -1,26 +1,24 @@
 // Shared styles
 
-html.keyboard-visible.mobile-view {
-  body.login-page,
-  body.signup-page,
-  body.invite-page {
-    height: calc(100dvh - var(--header-offset) - env(keyboard-inset-height));
-    max-height: calc(00dvh - var(--header-offset) - env(keyboard-inset-height));
-    overflow-y: scroll;
-    overflow-x: hidden;
-    padding-top: 0;
-
-    .login-fullpage,
-    .signup-fullpage,
-    .invites-show {
-      padding-top: var(--header-offset);
-    }
+.login-page,
+.signup-page,
+.invite-page {
+  #main-outlet,
+  #main-outlet-wrapper {
+    padding: 0;
   }
 }
 
 .login-fullpage,
 .signup-fullpage,
 .invites-show {
+  justify-content: flex-start;
+
+  html.keyboard-visible:not(.ios-device) & {
+    height: calc((var(--composer-vh, 1vh) * 100) - var(--header-offset));
+    overflow-y: scroll;
+  }
+
   .signup-body,
   .login-body {
     flex-direction: column;
