@@ -425,9 +425,10 @@ export default class SignupPageController extends Controller.extend(
     };
 
     const destinationUrl = this.get("authOptions.destination_url");
+    console.log('destinationUrl: ', destinationUrl);
 
     if (!isEmpty(destinationUrl)) {
-      cookie("destination_url", destinationUrl, { path: "/" });
+      // cookie("destination_url", destinationUrl, { path: "/" });
     }
 
     // Add the userFields to the data

@@ -427,6 +427,7 @@ export default class CreateAccount extends Component.extend(
     };
 
     const destinationUrl = this.get("model.authOptions.destination_url");
+    // console.log('destinationUrl: ', destinationUrl);
 
     if (!isEmpty(destinationUrl)) {
       cookie("destination_url", destinationUrl, { path: "/" });

@@ -243,6 +243,85 @@ shared_examples "login scenarios" do |login_page_object|
       expect(page).to have_css(".header-dropdown-toggle.current-user")
     end
   end
+
+  context "when retaining links during login" do
+    fab!(:topic) { Fabricate(:topic, first_post: Fabricate(:post)) }
+
+    it "does not redirect if the link is invalid" do
+      EmailToken.confirm(Fabricate(:email_token, user: user).token)
+
+      visit("/t/-/999")
+      find(".page-not-found .btn-primary").click
+      login_form.fill(username: "john", password: "supersecurepassword").click_login
+
+      expect(page).to have_css(".header-dropdown-toggle.current-user")
+      expect(page).to have_current_path("/")
+    end
+
+    context "when the topic is public" do
+      it "redirects to the last topic after login" do
+        EmailToken.confirm(Fabricate(:email_token, user: user).token)
+
+        visit("/t/#{topic.slug}/#{topic.id}")
+        find(".auth-buttons .login-button").click
+        login_form.fill(username: "john", password: "supersecurepassword").click_login
+
+        expect(page).to have_css(".header-dropdown-toggle.current-user")
+        expect(page).to have_current_path("/t/#{topic.slug}/#{topic.id}")
+      end
+
+      it "redirects to the last topic after login when login is required" do
+        SiteSetting.login_required = true
+        EmailToken.confirm(Fabricate(:email_token, user: user).token)
+
+        visit("/t/#{topic.slug}/#{topic.id}")
+        find(".login-welcome .login-button").click
+        login_form.fill(username: "john", password: "supersecurepassword").click_login
+
+        expect(page).to have_css(".header-dropdown-toggle.current-user")
+        expect(page).to have_current_path("/t/#{topic.slug}/#{topic.id}")
+      end
+    end
+
+    context "when the topic is private" do
+      fab!(:category) { Fabricate(:private_category, group: Fabricate(:group)) }
+      fab!(:private_topic) { Fabricate(:topic, first_post: Fabricate(:post), category: category) }
+
+      it "redirects to the last topic if the user has access" do
+        EmailToken.confirm(Fabricate(:email_token, user: admin).token)
+
+        visit("/t/#{private_topic.slug}/#{private_topic.id}")
+        find(".header-buttons .login-button").click
+        login_form.fill(username: "admin", password: "supersecurepassword").click_login
+
+        expect(page).to have_css(".header-dropdown-toggle.current-user")
+        expect(page).to have_current_path("/t/#{private_topic.slug}/#{private_topic.id}")
+      end
+
+      it "does not redirect if the user does not have access" do
+        EmailToken.confirm(Fabricate(:email_token, user: user).token)
+
+        visit("/t/#{private_topic.slug}/#{private_topic.id}")
+        find(".header-buttons .login-button").click
+        login_form.fill(username: "john", password: "supersecurepassword").click_login
+
+        expect(page).to have_css(".header-dropdown-toggle.current-user")
+        expect(page).to have_current_path("/")
+      end
+
+      it "redirects to the last topic if the user has access and login is required" do
+        SiteSetting.login_required = true
+        EmailToken.confirm(Fabricate(:email_token, user: admin).token)
+
+        visit("/t/#{private_topic.slug}/#{private_topic.id}")
+        find(".login-welcome .login-button").click
+        login_form.fill(username: "admin", password: "supersecurepassword").click_login
+
+        expect(page).to have_css(".header-dropdown-toggle.current-user")
+        expect(page).to have_current_path("/t/#{private_topic.slug}/#{private_topic.id}")
+      end
+    end
+  end
 end
 
 describe "Login", type: :system do

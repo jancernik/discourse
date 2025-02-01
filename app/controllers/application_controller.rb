@@ -957,6 +957,10 @@ class ApplicationController < ActionController::Base
         nil
       end
 
+    unless @current_user
+      cookies[:destination_url] = request.fullpath
+    end
+
     if !SiteSetting.login_required? || @current_user
       key = "page_not_found_topics:#{I18n.locale}"
       @topics_partial =

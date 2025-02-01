@@ -143,6 +143,16 @@ class StaticController < ApplicationController
           end
     end
 
+    topic_match = destination.match(%r{/t/[^/]+/(\d+)})
+    if topic_match
+      # Destination is a topic
+      topic = Topic.find_by(id: topic_match[1])
+      if topic && guardian.can_see_topic?(topic)
+        return redirect_to(destination, allow_other_host: false)
+      else
+        return redirect_to(path("/"), allow_other_host: false)
+      end
+    end
     redirect_to(destination, allow_other_host: false)
   end
 

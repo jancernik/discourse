@@ -1071,6 +1071,8 @@ class UsersController < ApplicationController
   end
 
   def account_created
+    puts "account_created"
+    puts "cookies(:destination_url): #{cookies(:destination_url)}"
     if current_user.present?
       if SiteSetting.enable_discourse_connect_provider && payload = cookies.delete(:sso_payload)
         return redirect_to(session_sso_provider_url + "?" + payload)
@@ -1126,7 +1128,19 @@ class UsersController < ApplicationController
         # The code below checks if the user was invited and redirects them to
         # the topic they were originally invited to.
         destination_url = cookies.delete(:destination_url)
-        if destination_url.blank?
+        puts "destination_url: #{destination_url}"
+        if destination_url
+          topic_match = destination_url.match(%r{/t/[^/]+/(\d+)})
+          if topic_match
+            # Destination is a topic
+            puts "is a topic"
+            topic = Topic.find_by(id: topic_match[1])
+            unless topic && guardian.can_see_topic?(topic)
+              puts "cannot see topic"
+              destination_url = path("/")
+            end
+          end
+        else
           topic =
             Invite
               .joins(:invited_users)

@@ -8,6 +8,22 @@ shared_examples "signup scenarios" do |signup_page_object, login_page_object|
   let(:invite) { Fabricate(:invite, email: "johndoe@example.com") }
   let(:topic) { Fabricate(:topic, title: "Super cool topic") }
 
+  def activate_account_with_email(email)
+    mail = ActionMailer::Base.deliveries.first
+    expect(mail.to).to contain_exactly(email)
+    activation_link = mail.body.to_s[%r{\S+/u/activate-account/\S+}]
+
+    visit activation_link
+    activate_account.click_activate_account
+  end
+
+  def activate_account_for_username(username, approve: false)
+    wait_for(timeout: 5) { User.find_by(username: username) != nil }
+    user = User.find_by(username: username)
+    user.update!(approved: true) if approve
+    EmailToken.confirm(Fabricate(:email_token, user: user).token)
+  end
+
   context "when anyone can create an account" do
     before { Jobs.run_immediately! }
 
@@ -34,14 +50,8 @@ shared_examples "signup scenarios" do |signup_page_object, login_page_object|
       signup_form.click_create_account
       expect(page).to have_css(".account-created")
 
-      mail = ActionMailer::Base.deliveries.first
-      expect(mail.to).to contain_exactly("johndoe@example.com")
-      activation_link = mail.body.to_s[%r{/u/activate-account/\S+}]
-
-      visit activation_link
-
-      activate_account.click_activate_account
-      activate_account.click_continue
+      activate_account_with_email("johndoe@example.com")
+      # activate_account.click_continue
 
       expect(page).to have_current_path("/")
       expect(page).to have_css(".header-dropdown-toggle.current-user")
@@ -60,13 +70,7 @@ shared_examples "signup scenarios" do |signup_page_object, login_page_object|
       invite_form.click_create_account
       expect(invite_form).to have_successful_message
 
-      mail = ActionMailer::Base.deliveries.first
-      expect(mail.to).to contain_exactly("johndoe@example.com")
-      activation_link = mail.body.to_s[%r{/u/activate-account/\S+}]
-
-      visit activation_link
-
-      activate_account.click_activate_account
+      activate_account_with_email("johndoe@example.com")
 
       expect(page).to have_current_path("/t/#{topic.slug}/#{topic.id}")
     end
@@ -175,9 +179,7 @@ shared_examples "signup scenarios" do |signup_page_object, login_page_object|
         login_form.click_login
         expect(login_form).to have_content(I18n.t("login.not_approved"))
 
-        user = User.find_by(username: "john")
-        user.update!(approved: true)
-        EmailToken.confirm(Fabricate(:email_token, user: user).token)
+        activate_account_for_username("john", approve: true)
 
         login_form.click_login
         expect(page).to have_css(".header-dropdown-toggle.current-user")
@@ -192,9 +194,7 @@ shared_examples "signup scenarios" do |signup_page_object, login_page_object|
         expect(signup_form).to have_valid_fields
         signup_form.click_create_account
 
-        wait_for(timeout: 5) { User.find_by(username: "john") != nil }
-        user = User.find_by(username: "john")
-        EmailToken.confirm(Fabricate(:email_token, user: user).token)
+        activate_account_for_username("john")
 
         visit "/"
         login_form.open
@@ -219,14 +219,8 @@ shared_examples "signup scenarios" do |signup_page_object, login_page_object|
         signup_form.click_create_account
         expect(page).to have_css(".account-created")
 
-        mail = ActionMailer::Base.deliveries.first
-        expect(mail.to).to contain_exactly("johndoe@example.com")
-        activation_link = mail.body.to_s[%r{\S+/u/activate-account/\S+}]
-
-        visit activation_link
-
-        activate_account.click_activate_account
-        activate_account.click_continue
+        activate_account_with_email("johndoe@example.com")
+        # activate_account.click_continue
 
         expect(page).to have_current_path("/discuss/")
         expect(page).to have_css(".header-dropdown-toggle.current-user")
@@ -344,6 +338,103 @@ shared_examples "signup scenarios" do |signup_page_object, login_page_object|
           signup_form.open
           expect(signup_form).to have_no_name_input
         end
+      end
+    end
+  end
+
+  context "when retaining links during signup" do
+    before { Jobs.run_immediately! }
+
+    fab!(:topic) { Fabricate(:topic, first_post: Fabricate(:post)) }
+
+    it "does not redirect if the link is invalid" do
+      visit("/t/-/999")
+      find(".header-buttons .sign-up-button").click
+      signup_form
+      .fill_email("johndoe@example.com")
+      .fill_username("john")
+      .fill_password("supersecurepassword")
+
+
+      expect(signup_form).to have_valid_fields
+      signup_form.click_create_account
+    expect(page).to have_css(".account-created")
+
+    activate_account_with_email("johndoe@example.com")
+
+      expect(page).to have_css(".header-dropdown-toggle.current-user")
+      expect(page).to have_current_path("/")
+    end
+
+    context "when the topic is public" do
+      it "redirects to the last topic after signup" do
+        visit("/t/#{topic.slug}/#{topic.id}")
+
+        if page.has_css?(".auth-buttons .sign-up-button", wait: 0)
+          find(".auth-buttons .sign-up-button").click
+        else
+          find(".auth-buttons .login-button").click
+          find("#new-account-link").click
+        end
+
+        signup_form
+          .fill_email("johndoe@example.com")
+          .fill_username("john")
+          .fill_password("supersecurepassword")
+
+        expect(signup_form).to have_valid_fields
+        signup_form.click_create_account
+        expect(page).to have_css(".account-created")
+        activate_account_with_email("johndoe@example.com")
+        activate_account.click_continue
+
+        expect(page).to have_css(".header-dropdown-toggle.current-user")
+        expect(page).to have_current_path("/t/#{topic.slug}/#{topic.id}")
+      end
+
+      it "redirects to the last topic after signup when login is required" do
+        SiteSetting.login_required = true
+
+        visit("/t/#{topic.slug}/#{topic.id}")
+        find(".login-welcome .login-button").click
+        signup_form.fill(username: "john", password: "supersecurepassword").click_create_account
+
+        expect(page).to have_css(".header-dropdown-toggle.current-user")
+        expect(page).to have_current_path("/t/#{topic.slug}/#{topic.id}")
+      end
+    end
+
+    context "when the topic is private" do
+      fab!(:category) { Fabricate(:private_category, group: Fabricate(:group)) }
+      fab!(:private_topic) { Fabricate(:topic, first_post: Fabricate(:post), category: category) }
+
+      it "redirects to the last topic if the user has access" do
+        visit("/t/#{private_topic.slug}/#{private_topic.id}")
+        find(".header-buttons .login-button").click
+        signup_form.fill(username: "admin", password: "supersecurepassword").click_create_account
+
+        expect(page).to have_css(".header-dropdown-toggle.current-user")
+        expect(page).to have_current_path("/t/#{private_topic.slug}/#{private_topic.id}")
+      end
+
+      it "does not redirect if the user does not have access" do
+        visit("/t/#{private_topic.slug}/#{private_topic.id}")
+        find(".header-buttons .login-button").click
+        signup_form.fill(username: "john", password: "supersecurepassword").click_create_account
+
+        expect(page).to have_css(".header-dropdown-toggle.current-user")
+        expect(page).to have_current_path("/")
+      end
+
+      it "redirects to the last topic if the user has access and login is required" do
+        SiteSetting.login_required = true
+
+        visit("/t/#{private_topic.slug}/#{private_topic.id}")
+        find(".login-welcome .login-button").click
+        signup_form.fill(username: "admin", password: "supersecurepassword").click_create_account
+
+        expect(page).to have_css(".header-dropdown-toggle.current-user")
+        expect(page).to have_current_path("/t/#{private_topic.slug}/#{private_topic.id}")
       end
     end
   end
